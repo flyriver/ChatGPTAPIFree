@@ -6,7 +6,20 @@ import fetch from 'node-fetch';
 
 const port = parseInt(process.env.PORT || '8080', 10);
 const api_keys = JSON.parse(process.env.API_KEYS);
-const upstreamUrl = 'https://api.openai.com/v1/chat/completions';
+const api_type = process.env.API_TYPE || 'openai';
+const getUpstreamUrl = function() {
+    let url = 'https://api.openai.com/v1/chat/completions';
+    if (api_type === 'azure') {
+        const api_base = process.env.API_BASE;
+        const api_version = process.env.API_VERSION;
+        const api_deployment = process.env.API_DEPLOYMENT;
+        url = `${api_base}/openai/deployments/${api_deployment}/chat/completions?api-version=${api_version}`;
+    }
+
+    return url;
+}
+const upstreamUrl = getUpstreamUrl();
+console.log(`Upstream URL: ${upstreamUrl}`);
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -46,14 +59,20 @@ const handlePost = async (req, res) => {
   }
 
   try {
-    const authHeader = req.get('Authorization');
-    const authHeaderUpstream = authHeader || `Bearer ${randomChoice(api_keys)}`;
-
     const requestHeader = {
       'Content-Type': 'application/json',
-      'Authorization': authHeaderUpstream,
       'User-Agent': 'curl/7.64.1',
     };
+    if (api_type === 'azure') {
+      const key = randomChoice(api_keys);
+      requestHeader['api-key'] = key;
+    }
+    else {
+      const authHeader = req.get('Authorization');
+      const authHeaderUpstream = authHeader || `Bearer ${randomChoice(api_keys)}`;
+      requestHeader['Authorization'] = authHeaderUpstream;
+    }
+
     const resUpstream = await fetch(upstreamUrl, {
       method: 'POST',
       headers: requestHeader,
